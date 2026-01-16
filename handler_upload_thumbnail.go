@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
@@ -69,8 +68,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	filetype := strings.Split(contentType, "/")[1]
-	destinationPath := filepath.Join(cfg.assetsRoot, fmt.Sprintf("%s.%s", videoID.String(), filetype))
+	destinationPath := filepath.Join(cfg.assetsRoot, getAssetPath(contentType))
 	newFile, err := os.Create(destinationPath)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "could not create a new file on the server", err)
@@ -89,5 +87,6 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusInternalServerError, "couldn't add video thumbnail", err)
 		return
 	}
+
 	respondWithJSON(w, http.StatusOK, videoMetadata)
 }
