@@ -4,3 +4,5 @@ out
 assets/
 samples/
 requests/
+/AWSCLIV2.pkg
+/res.json

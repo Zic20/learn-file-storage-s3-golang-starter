@@ -23,9 +23,9 @@ func getAssetPath(filetype string) string {
 	if err != nil {
 		panic("error generating random bytes")
 	}
-	url_string := base64.RawStdEncoding.EncodeToString(key)
+	url_string := base64.RawURLEncoding.EncodeToString(key)
 
-	return strings.Replace(fmt.Sprintf("%s.%s", url_string, contentType), "/", "", -1)
+	return fmt.Sprintf("%s.%s", url_string, contentType)
 }
 
 func (cfg apiConfig) getobjectUrl(key string) string {
