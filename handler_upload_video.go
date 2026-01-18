@@ -92,7 +92,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 
 	aspectRatio, err := getVideoAspectRatio(tmpFile.Name())
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "couldn't get the video's aspect ration", err)
+		respondWithError(w, http.StatusInternalServerError, "couldn't get the video's aspect ratio", err)
 		return
 	}
 
@@ -105,10 +105,23 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		key = "other/" + key
 	}
 
+	faststartVideoPath, err := processVideoForFastStart(tmpFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "couldn't process video for fast start", err)
+		return
+	}
+
+	faststartVideo, err := os.Open(faststartVideoPath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error fetching fast start video", err)
+		return
+	}
+	defer os.Remove(faststartVideoPath)
+
 	_, err = cfg.s3client.PutObject(r.Context(), &s3.PutObjectInput{
 		Bucket:      aws.String(cfg.s3Bucket),
 		Key:         aws.String(key),
-		Body:        tmpFile,
+		Body:        faststartVideo,
 		ContentType: aws.String(contentType),
 	})
 
@@ -125,7 +138,13 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, videoMetadata)
+	presignedVideo, err := cfg.dbVideoToSignedVideo(videoMetadata)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error generating presigned video", err)
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, presignedVideo)
 
 }
 
@@ -155,4 +174,26 @@ func getVideoAspectRatio(filepath string) (string, error) {
 	}
 
 	return aspectRatio.Streams[0].DisplayAspectRatio, nil
+}
+
+func processVideoForFastStart(filePath string) (string, error) {
+	processedFilePath := fmt.Sprintf("%s.processing", filePath)
+
+	cmd := exec.Command("ffmpeg", "-i", filePath, "-movflags", "faststart", "-codec", "copy", "-f", "mp4", processedFilePath)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("error processing video: %s, %v", stderr.String(), err)
+	}
+
+	fileInfo, err := os.Stat(processedFilePath)
+	if err != nil {
+		return "", fmt.Errorf("could not stat processed file: %v", err)
+	}
+	if fileInfo.Size() == 0 {
+		return "", fmt.Errorf("processed file is empty")
+	}
+
+	return processedFilePath, nil
 }
